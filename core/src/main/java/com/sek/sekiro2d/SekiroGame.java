@@ -57,7 +57,7 @@ class Player {
         return health;
     }
 
-    public float getSpeed(){
+    public float getSpeed() {
         return speed;
     }
 
@@ -91,8 +91,12 @@ class Player {
         bounds.setPosition(x, y);
     }
 
-    public void handleDeath(){
+    public void handleDeath() {
         isDead = true;
+    }
+
+    public boolean isDead() {
+        return isDead;
     }
 }
 
@@ -100,14 +104,19 @@ class Enemy {
     private float x, y;
     private float speed;
     private Rectangle bounds;
-    private boolean movingRight;  // Track enemy's movement direction
+    private Texture[] walkLeft;
+    private Texture[] walkRight;
+    private Texture currentTexture;
+    private float animationTime = 0f;
 
-    public Enemy(float x, float y, float speed) {
+    public Enemy(float x, float y, float speed, Texture[] walkLeft, Texture[] walkRight) {
         this.x = x;
         this.y = y;
         this.speed = speed;
         this.bounds = new Rectangle(x, y, 50, 50);
-        this.movingRight = true; // Initially, moving right
+        this.walkLeft = walkLeft;
+        this.walkRight = walkRight;
+        this.currentTexture = walkRight[0]; // Default texture
     }
 
     public float getX() {
@@ -132,22 +141,29 @@ class Enemy {
         return bounds;
     }
 
+    public Texture getCurrentTexture() {
+        return currentTexture;
+    }
+
     public void moveTowards(Player player, float deltaTime) {
         float playerX = player.getX();
-        float playerY = player.getY();
-
         float dx = playerX - x;
-        float dy = playerY - y;
-
-        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        float distance = Math.abs(dx);
 
         if (distance > 50) { // Stop moving if the distance is less than 50 pixels
-            if (dx > 0) {
-                movingRight = true;
-            } else {
-                movingRight = false;
-            }
+            animationTime += deltaTime;
+
+            // Move horizontally towards the player
             x += (dx / distance) * speed * deltaTime;
+
+            // Choose animation based on movement direction
+            if (dx < 0) {
+                int frame = (int) (animationTime * 10) % walkLeft.length;
+                currentTexture = walkLeft[frame];
+            } else {
+                int frame = (int) (animationTime * 10) % walkRight.length;
+                currentTexture = walkRight[frame];
+            }
 
             updateBounds();
         }
@@ -156,18 +172,13 @@ class Enemy {
     private void updateBounds() {
         bounds.setPosition(x, y);
     }
-
-    public boolean isMovingRight() {
-        return movingRight;
-    }
 }
 
-/** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class SekiroGame extends ApplicationAdapter {
     private SpriteBatch batch;
     private Texture idleTexture;
-    private Texture walkLeftTexture;
-    private Texture walkRightTexture;
+    private Texture[] walkLeft;
+    private Texture[] walkRight;
     private Texture currentTexture;
     private Texture background;
     private Player player;
@@ -178,8 +189,8 @@ public class SekiroGame extends ApplicationAdapter {
     private float floor;
     private float gravity = -0.5f;
     private float jumpVelocity = 10f;
+    private float animationTime = 0f;
 
-    // Time accumulator for health reduction
     private float timeSinceLastDamage = 0f;
 
     @Override
@@ -187,14 +198,20 @@ public class SekiroGame extends ApplicationAdapter {
         batch = new SpriteBatch();
 
         idleTexture = new Texture("idle.png");
-        walkLeftTexture = new Texture("left.png");
-        walkRightTexture = new Texture("right.png");
+        walkLeft = new Texture[2];
+        walkLeft[0] = new Texture("left1.png");
+        walkLeft[1] = new Texture("left2.png");
+
+        walkRight = new Texture[2];
+        walkRight[0] = new Texture("right1.png");
+        walkRight[1] = new Texture("right2.png");
+
         background = new Texture("background-2.jpg");
 
         currentTexture = idleTexture;
 
         player = new Player(400, 50, 200, 100);
-        enemy = new Enemy(100, 50, 100); // Start enemy at x=100, y=50 with speed=100
+        enemy = new Enemy(100, 50, 100, walkLeft, walkRight);
 
         camera = new OrthographicCamera();
         viewport = new FitViewport(800, 500, camera);
@@ -211,15 +228,21 @@ public class SekiroGame extends ApplicationAdapter {
 
         applyPhysics();
 
-        float worldWidth = viewport.getWorldWidth();
-        float worldHeight = viewport.getWorldHeight();
+        if (player.isDead()) {
+            displayGameOverScreen();
+            return;
+        }
 
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
+            animationTime += Gdx.graphics.getDeltaTime();
+            int frame = (int) (animationTime * 10) % walkLeft.length;
+            currentTexture = walkLeft[frame];
             player.move(-player.getSpeed() * Gdx.graphics.getDeltaTime(), 0);
-            currentTexture = walkLeftTexture;
         } else if (Gdx.input.isKeyPressed(Input.Keys.D)) {
+            animationTime += Gdx.graphics.getDeltaTime();
+            int frame = (int) (animationTime * 10) % walkRight.length;
+            currentTexture = walkRight[frame];
             player.move(player.getSpeed() * Gdx.graphics.getDeltaTime(), 0);
-            currentTexture = walkRightTexture;
         } else {
             currentTexture = idleTexture;
         }
@@ -233,23 +256,17 @@ public class SekiroGame extends ApplicationAdapter {
 
         handleCollisions();
 
+        camera.position.set(player.getX() + 25, viewport.getWorldHeight() / 2, 0);
+        camera.update();
+
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        batch.draw(background, 0, 0, worldWidth, worldHeight);
+        batch.draw(background, 0, 0, viewport.getWorldWidth(), viewport.getWorldHeight());
         batch.draw(currentTexture, player.getX(), player.getY(), 50, 50);
-
-        // Draw the enemy facing the correct direction
-        if (enemy.isMovingRight()) {
-            batch.draw(walkRightTexture, enemy.getX(), enemy.getY(), 50, 50); // Facing right
-        } else {
-            batch.draw(walkLeftTexture, enemy.getX(), enemy.getY(), 50, 50); // Facing left
-        }
-
+        batch.draw(enemy.getCurrentTexture(), enemy.getX(), enemy.getY(), 50, 50);
         batch.end();
 
         drawHealthBar();
-
-        camera.update();
     }
 
     private void applyPhysics() {
@@ -267,23 +284,17 @@ public class SekiroGame extends ApplicationAdapter {
     private void handleCollisions() {
         timeSinceLastDamage += Gdx.graphics.getDeltaTime();
 
-        // Handle collision between player and enemy
         if (player.getBounds().overlaps(enemy.getBounds())) {
-            // Reduce player's health every second
             if (timeSinceLastDamage >= 1f) {
                 player.setHealth(player.getHealth() - 20);
                 timeSinceLastDamage = 0f;
             }
 
-            // Stop enemy's movement for a brief moment during collision
-            enemy.setX(enemy.getX()); // Maintain enemy's position
-            enemy.setY(enemy.getY()); // Halts enemy's motion
-
             if (player.getHealth() <= 0) {
                 player.handleDeath();
             }
         } else {
-            timeSinceLastDamage = 0f; // Reset damage timer if no collision
+            timeSinceLastDamage = 0f;
         }
     }
 
@@ -295,6 +306,12 @@ public class SekiroGame extends ApplicationAdapter {
         shapeRenderer.end();
     }
 
+    private void displayGameOverScreen() {
+        batch.begin();
+        batch.draw(new Texture("game_over.png"), 200, 200, 400, 100);
+        batch.end();
+    }
+
     @Override
     public void resize(int width, int height) {
         viewport.update(width, height);
@@ -304,8 +321,11 @@ public class SekiroGame extends ApplicationAdapter {
     public void dispose() {
         batch.dispose();
         idleTexture.dispose();
-        walkLeftTexture.dispose();
-        walkRightTexture.dispose();
+        walkLeft[0].dispose();
+        walkLeft[1].dispose();
+        walkRight[0].dispose();
+        walkRight[1].dispose();
+        background.dispose();
         shapeRenderer.dispose();
     }
 }
