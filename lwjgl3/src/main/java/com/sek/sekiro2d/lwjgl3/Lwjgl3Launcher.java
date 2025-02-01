@@ -29,7 +29,7 @@ public class Lwjgl3Launcher {
         // Set window dimensions and fullscreen mode toggle
         configuration.setWindowedMode(1000, 800);
         // Uncomment the following line to enable fullscreen.
-//         configuration.setFullscreenMode(displayMode);
+         configuration.setFullscreenMode(displayMode);
 
         // Specify window icons for different sizes
         configuration.setWindowIcon("libgdx128.png", "libgdx64.png", "libgdx32.png", "libgdx16.png");
