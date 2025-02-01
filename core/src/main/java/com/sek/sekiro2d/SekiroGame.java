@@ -7,10 +7,15 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import org.w3c.dom.Text;
 
 class Player {
     private float x, y;
@@ -20,6 +25,10 @@ class Player {
     private float verticalVelocity;
     private Rectangle bounds;
     private boolean isDead;
+    private Rectangle weapon;
+    private float weaponRotation;
+    private float attackTimer = 0;
+    private boolean isAttacking = false;
 
     public Player(float x, float y, float speed, int health) {
         this.x = x;
@@ -28,7 +37,9 @@ class Player {
         this.health = health;
         this.isGrounded = true;
         this.verticalVelocity = 0f;
-        this.bounds = new Rectangle(x, y, 50, 50);
+        this.bounds = new Rectangle(x, y, 100, 100);
+        this.weapon = new Rectangle(x , y + y/2, 150, 5);
+        this.weaponRotation = 0;
     }
 
     public float getX() {
@@ -89,6 +100,7 @@ class Player {
 
     private void updateBounds() {
         bounds.setPosition(x, y);
+        weapon.setPosition(x + 25, y + y/1/3);
     }
 
     public void handleDeath() {
@@ -98,6 +110,40 @@ class Player {
     public boolean isDead() {
         return isDead;
     }
+
+    public Rectangle getWeapon() {
+        return weapon;
+    }
+
+    public float getWeaponRotation() {
+        return weaponRotation;
+    }
+
+    // Setter for rotation (allows external changes)
+    public void setWeaponRotation(float weaponRotation) {
+        this.weaponRotation = weaponRotation;
+    }
+
+    // Increase rotation for testing (call this in update logic)
+    public void playerAttackOne() {
+        if(!isAttacking) {
+            isAttacking = true;
+            weaponRotation += 90; // Or whatever angle you want
+        }
+    }
+
+    public void updateAttack(float delta) {
+        if(isAttacking) {
+            attackTimer += delta;
+            if(attackTimer > 0.2f) {  // 0.2 seconds duration
+                isAttacking = false;
+                attackTimer = 0;
+                weaponRotation -= 90; // Reset rotation
+            }
+        }
+    }
+
+
 }
 
 class Enemy {
@@ -113,10 +159,10 @@ class Enemy {
         this.x = x;
         this.y = y;
         this.speed = speed;
-        this.bounds = new Rectangle(x, y, 50, 50);
+        this.bounds = new Rectangle(x, y, 100, 100);
         this.walkLeft = walkLeft;
         this.walkRight = walkRight;
-        this.currentTexture = walkRight[0]; // Default texture
+        this.currentTexture = walkRight[0];
     }
 
     public float getX() {
@@ -150,13 +196,10 @@ class Enemy {
         float dx = playerX - x;
         float distance = Math.abs(dx);
 
-        if (distance > 50) { // Stop moving if the distance is less than 50 pixels
+        if (distance > 50) {
             animationTime += deltaTime;
-
-            // Move horizontally towards the player
             x += (dx / distance) * speed * deltaTime;
 
-            // Choose animation based on movement direction
             if (dx < 0) {
                 int frame = (int) (animationTime * 10) % walkLeft.length;
                 currentTexture = walkLeft[frame];
@@ -177,6 +220,7 @@ class Enemy {
 public class SekiroGame extends ApplicationAdapter {
     private SpriteBatch batch;
     private Texture idleTexture;
+    private Texture[] idle;
     private Texture[] walkLeft;
     private Texture[] walkRight;
     private Texture currentTexture;
@@ -188,16 +232,17 @@ public class SekiroGame extends ApplicationAdapter {
     private ShapeRenderer shapeRenderer;
     private float floor;
     private float gravity = -0.5f;
-    private float jumpVelocity = 10f;
+    private float jumpVelocity = 17f;
     private float animationTime = 0f;
-
-    private float timeSinceLastDamage = 0f;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
 
         idleTexture = new Texture("idle.png");
+        idle = new Texture[1];
+        idle[0] = new Texture("idle_1.png");
+
         walkLeft = new Texture[2];
         walkLeft[0] = new Texture("left1.png");
         walkLeft[1] = new Texture("left2.png");
@@ -214,7 +259,7 @@ public class SekiroGame extends ApplicationAdapter {
         enemy = new Enemy(100, 50, 100, walkLeft, walkRight);
 
         camera = new OrthographicCamera();
-        viewport = new FitViewport(800, 500, camera);
+        viewport = new FitViewport(1000, 520, camera);
         viewport.apply();
         floor = 50;
         camera.position.set(viewport.getWorldWidth() / 2, viewport.getWorldHeight() / 2, 0);
@@ -243,8 +288,14 @@ public class SekiroGame extends ApplicationAdapter {
             int frame = (int) (animationTime * 10) % walkRight.length;
             currentTexture = walkRight[frame];
             player.move(player.getSpeed() * Gdx.graphics.getDeltaTime(), 0);
-        } else {
-            currentTexture = idleTexture;
+        } if (Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
+            player.playerAttackOne();
+        }
+
+        else {
+            animationTime += Gdx.graphics.getDeltaTime();
+            int frame = (int) (animationTime * 5) % idle.length;
+            currentTexture = idle[frame];
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && player.isGrounded()) {
@@ -261,12 +312,28 @@ public class SekiroGame extends ApplicationAdapter {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        batch.draw(background, 0, 0, viewport.getWorldWidth(), viewport.getWorldHeight());
-        batch.draw(currentTexture, player.getX(), player.getY(), 50, 50);
-        batch.draw(enemy.getCurrentTexture(), enemy.getX(), enemy.getY(), 50, 50);
+        batch.draw(background, 0, 0, viewport.getWorldWidth()*2, viewport.getWorldHeight());
+        batch.draw(currentTexture, player.getX(), player.getY(), 150, 150);
+        batch.draw(enemy.getCurrentTexture(), enemy.getX(), enemy.getY(), 100, 100);
         batch.end();
 
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+
+        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.rect(player.getBounds().x + player.getBounds().width / 2 - 5, player.getBounds().y,
+        player.getBounds().width / 2 + 2, player.getBounds().height - 18);
+
+        shapeRenderer.setColor(Color.RED);
+        shapeRenderer.rect(enemy.getBounds().x, enemy.getBounds().y,
+            enemy.getBounds().width, enemy.getBounds().height);
+
+        shapeRenderer.end();
+
+        player.updateAttack(Gdx.graphics.getDeltaTime());
+
         drawHealthBar();
+        drawWeapon();
     }
 
     private void applyPhysics() {
@@ -282,29 +349,70 @@ public class SekiroGame extends ApplicationAdapter {
     }
 
     private void handleCollisions() {
-        timeSinceLastDamage += Gdx.graphics.getDeltaTime();
-
         if (player.getBounds().overlaps(enemy.getBounds())) {
-            if (timeSinceLastDamage >= 1f) {
-                player.setHealth(player.getHealth() - 20);
-                timeSinceLastDamage = 0f;
+            Rectangle intersection = new Rectangle();
+            Intersector.intersectRectangles(player.getBounds(), enemy.getBounds(), intersection);
+
+            float playerCenterX = player.getX() + player.getBounds().width / 2;
+            float playerCenterY = player.getY() + player.getBounds().height / 2;
+            float enemyCenterX = enemy.getX() + enemy.getBounds().width / 2;
+            float enemyCenterY = enemy.getY() + enemy.getBounds().height / 2;
+
+            float directionX = playerCenterX - enemyCenterX;
+
+            float minDistanceX = (player.getBounds().width + enemy.getBounds().width) / 2;
+            float separationX = 0;
+
+            if (Math.abs(directionX) < minDistanceX) {
+                separationX = (minDistanceX - Math.abs(directionX)) * Math.signum(directionX);
             }
 
-            if (player.getHealth() <= 0) {
-                player.handleDeath();
-            }
-        } else {
-            timeSinceLastDamage = 0f;
+            float separationSpeed = 10f;
+            float deltaTime = Gdx.graphics.getDeltaTime();
+
+            player.move(
+                separationX * separationSpeed * deltaTime,
+                0
+            );
         }
     }
 
     private void drawHealthBar() {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.RED);
+        shapeRenderer.setColor(Color.GREEN);
         shapeRenderer.rect(10, viewport.getWorldHeight() - 20, player.getHealth() * 2, 10);
         shapeRenderer.end();
     }
+
+    public void drawWeapon() {
+        shapeRenderer.setColor(Color.BLUE);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+
+        // Get weapon rectangle
+        Rectangle weapon = player.getWeapon();
+
+        // Rotation setup
+        float rotation = player.getWeaponRotation();
+        float originX = weapon.x + weapon.width / 3;
+        float originY = weapon.y + weapon.height / 3;
+
+        // Apply rotation
+        shapeRenderer.identity();
+        shapeRenderer.translate(originX, originY, 0);
+        shapeRenderer.rotate(0, 0, 1, rotation);
+        shapeRenderer.translate(-originX, -originY, 0);
+
+        // Draw rectangle
+        shapeRenderer.rect(weapon.x, weapon.y, weapon.width, weapon.height);
+
+        // Reset transformation
+        shapeRenderer.identity();
+
+        shapeRenderer.end();
+    }
+
+
 
     private void displayGameOverScreen() {
         batch.begin();
