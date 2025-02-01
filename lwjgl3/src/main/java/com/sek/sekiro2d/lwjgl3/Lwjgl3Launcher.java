@@ -27,7 +27,7 @@ public class Lwjgl3Launcher {
         configuration.setForegroundFPS(displayMode.refreshRate);
 
         // Set window dimensions and fullscreen mode toggle
-        configuration.setWindowedMode(800, 500);
+        configuration.setWindowedMode(1000, 800);
         // Uncomment the following line to enable fullscreen.
 //         configuration.setFullscreenMode(displayMode);
 
