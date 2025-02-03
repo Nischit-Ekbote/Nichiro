@@ -4,6 +4,7 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -162,6 +163,7 @@ class Player extends GameObject {
         if(isDead){
             int frame = (int)(animationTime * 10) % deathRight.length;
             currentTexture = deathRight[frame];
+
         }
     }
 
@@ -415,12 +417,14 @@ public class SekiroGame extends ApplicationAdapter {
     private OrthographicCamera camera;
     private ShapeRenderer shapeRenderer;
     private Texture background;
+    private boolean gameOver;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
+        font.getData().setScale(2f);
         player = new Player(400, FLOOR_HEIGHT, 200, 100);
         enemy = new Enemy(100, FLOOR_HEIGHT, 100);
 
@@ -432,17 +436,27 @@ public class SekiroGame extends ApplicationAdapter {
 
         shapeRenderer = new ShapeRenderer();
         background = new Texture("background-2.jpg");
+        gameOver = false;
     }
 
     @Override
     public void render() {
-        float delta = Gdx.graphics.getDeltaTime();
-        update(delta);
-        draw();
+        float realTime  = Gdx.graphics.getDeltaTime();
+        float delta = realTime * 0.7f;
+
+        if (!gameOver) {
+            update(delta);
+            draw();
+        } else {
+            drawGameOver(delta);
+        }
     }
 
     private void update(float delta) {
-        if (player.isDead()) return;
+        if (player.isDead()) {
+            gameOver = true;
+            return;
+        }
 
         handleInput(delta);
         applyPhysics(delta);
@@ -454,6 +468,31 @@ public class SekiroGame extends ApplicationAdapter {
         updateCamera();
     }
 
+    private void drawGameOver(float delta) {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        batch.begin();
+        font.draw(batch, "GAME OVER",
+            viewport.getWorldWidth() / 2 - 100,
+            viewport.getWorldHeight() / 2);
+
+        font.draw(batch, "Press R to Restart",
+            viewport.getWorldWidth() / 2 - 100,
+            viewport.getWorldHeight() / 2 - 50);
+
+        if (Gdx.input.isKeyPressed(Input.Keys.R)) {
+            resetGame();
+        }
+
+        batch.end();
+    }
+
+    private void resetGame() {
+        player = new Player(400, FLOOR_HEIGHT, 200, 100);
+        enemy = new Enemy(100, FLOOR_HEIGHT, 100);
+        gameOver = false;
+    }
     private void handleInput(float delta) {
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
             player.move(-player.speed * delta, 0);
@@ -487,41 +526,32 @@ public class SekiroGame extends ApplicationAdapter {
     private void handleCollisions() {
         if (player.getIsAttacking()) {
             if (!hasPlayerHitInCurrentAttack && player.getWeapon().overlaps(enemy.getBounds())) {
-                System.out.println("Hit enemy!");
-                if (player.getHealth() > 0) {
-                    // Calculate new health ensuring it doesn't go below 0
-                    int newHealth = Math.max(0, enemy.getHealth() - 30);
-                    System.out.println(newHealth);
-                    enemy.setHealth(newHealth);
-                    hasPlayerHitInCurrentAttack = true;
-                }
-                if (player.getHealth() == 0) {
-                    player.setDead(true);
-                    System.out.println("Game over: Player wins");
-                }
+                int newHealth = Math.max(0, enemy.getHealth() - 30);
+                enemy.setHealth(newHealth);
+                hasPlayerHitInCurrentAttack = true;
             }
         } else {
             hasPlayerHitInCurrentAttack = false;
         }
 
-
         if (enemy.isAttacking()) {
             if (!hasEnemyHitInCurrentAttack && enemy.getAttackHitbox().overlaps(player.getBounds())) {
-//                System.out.println("Hit Player!");
-                if (player.getHealth() > 0) {
-                    // Calculate new health ensuring it doesn't go below 0
-                    int newHealth = Math.max(0, player.getHealth() - 30);
-                    player.setHealth(newHealth);
-                    hasEnemyHitInCurrentAttack = true;
-                }
-                if (player.getHealth() == 0) {
-//                    System.out.println("Game over: Enemy wins");
+                int newHealth = Math.max(0, player.getHealth() - 30);
+                player.setHealth(newHealth);
+                hasEnemyHitInCurrentAttack = true;
+
+                if (newHealth <= 0) {
+                    player.setDead(true);
                 }
             }
         } else {
             hasEnemyHitInCurrentAttack = false;
         }
 
+        // Optional: Add enemy death condition if needed
+        if (enemy.getHealth() <= 0) {
+            // Handle enemy death logic if required
+        }
     }
 
     private void updateCamera() {
