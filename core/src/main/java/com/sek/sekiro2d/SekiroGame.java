@@ -471,21 +471,19 @@ public class SekiroGame extends ApplicationAdapter {
 
     @Override
     public void render() {
-        float realTime  = Gdx.graphics.getDeltaTime();
-        float delta = realTime * 0.7f;
-
-        if (!gameOver) {
-            update(delta);
-            draw();
-        } else {
-            drawGameOver(delta);
         if (currentState == GameState.MENU) {
             updateMenu();
             drawMenu();
         } else {
-            float delta = Gdx.graphics.getDeltaTime();
-            update(delta);
-            draw();
+            float realTime = Gdx.graphics.getDeltaTime();
+            float delta = realTime * 0.7f;
+
+            if (!gameOver) {
+                update(delta);
+                draw();
+            } else {
+                drawGameOver(delta);
+            }
         }
     }
 
