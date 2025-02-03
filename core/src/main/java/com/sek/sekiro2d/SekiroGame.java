@@ -1,9 +1,10 @@
 package com.sek.sekiro2d;
-
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -392,6 +393,22 @@ public class SekiroGame extends ApplicationAdapter {
     private boolean hasPlayerHitInCurrentAttack = false;
     private boolean hasEnemyHitInCurrentAttack = false;
 
+
+    //
+    private static final int BUTTON_WIDTH = 200;
+    private static final int BUTTON_HEIGHT = 60;
+    private static final Color BUTTON_COLOR = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+    private static final Color BUTTON_HOVER_COLOR = new Color(0.3f, 0.3f, 0.3f, 0.8f);
+    private static final Color TEXT_COLOR = new Color(1, 1, 1, 1);
+    private enum GameState { MENU, PLAYING }
+    private GameState currentState;
+    private Rectangle startButton;
+    private Rectangle quitButton;
+    private ShapeRenderer menuShapeRenderer;
+    private Texture menuBackground;
+    //
+
+
     private SpriteBatch batch;
     private BitmapFont font;
     private Player player;
@@ -403,28 +420,112 @@ public class SekiroGame extends ApplicationAdapter {
 
     @Override
     public void create() {
+        currentState = GameState.MENU;
+
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
-        player = new Player(400, FLOOR_HEIGHT, 200, 100);
-        enemy = new Enemy(100, FLOOR_HEIGHT, 100);
-
         camera = new OrthographicCamera();
         viewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, camera);
         viewport.apply();
 
+        //
+        float centerX = WORLD_WIDTH / 2 - BUTTON_WIDTH / 2;
+        startButton = new Rectangle(centerX, WORLD_HEIGHT / 2 + 40, BUTTON_WIDTH, BUTTON_HEIGHT);
+        quitButton = new Rectangle(centerX, WORLD_HEIGHT / 2 - 40, BUTTON_WIDTH, BUTTON_HEIGHT);
+        //
+
         camera.position.set(viewport.getWorldWidth() / 2, viewport.getWorldHeight() / 2, 0);
 
+        menuShapeRenderer = new ShapeRenderer();
+
+        player = new Player(400, FLOOR_HEIGHT, 200, 100);
+        enemy = new Enemy(100, FLOOR_HEIGHT, 100);
         shapeRenderer = new ShapeRenderer();
         background = new Texture("background-2.jpg");
+
+        menuBackground = background;
     }
 
     @Override
     public void render() {
-        float delta = Gdx.graphics.getDeltaTime();
-        update(delta);
-        draw();
+        if (currentState == GameState.MENU) {
+            updateMenu();
+            drawMenu();
+        } else {
+            float delta = Gdx.graphics.getDeltaTime();
+            update(delta);
+            draw();
+        }
     }
+
+
+    private void updateMenu() {
+        Vector3 touchPos = new Vector3();
+        touchPos.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+        viewport.unproject(touchPos);
+
+        if (Gdx.input.justTouched()) {
+            if (startButton.contains(touchPos.x, touchPos.y)) {
+                currentState = GameState.PLAYING;
+            } else if (quitButton.contains(touchPos.x, touchPos.y)) {
+                Gdx.app.exit();
+            }
+        }
+    }
+
+    private void drawMenu() {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        batch.setProjectionMatrix(camera.combined);
+
+        // Draw background
+        batch.begin();
+        batch.draw(menuBackground, 0, 0, viewport.getWorldWidth(), viewport.getWorldHeight());
+        batch.end();
+
+        // Draw semi-transparent overlay
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        menuShapeRenderer.setProjectionMatrix(camera.combined);
+        menuShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        menuShapeRenderer.setColor(0, 0, 0, 0.5f);
+        menuShapeRenderer.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+        // Draw buttons
+        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        viewport.unproject(mousePos);
+
+        // Start button
+        if (startButton.contains(mousePos.x, mousePos.y)) {
+            menuShapeRenderer.setColor(BUTTON_HOVER_COLOR);
+        } else {
+            menuShapeRenderer.setColor(BUTTON_COLOR);
+        }
+        menuShapeRenderer.rect(startButton.x, startButton.y, startButton.width, startButton.height);
+
+        // Quit button
+        if (quitButton.contains(mousePos.x, mousePos.y)) {
+            menuShapeRenderer.setColor(BUTTON_HOVER_COLOR);
+        } else {
+            menuShapeRenderer.setColor(BUTTON_COLOR);
+        }
+        menuShapeRenderer.rect(quitButton.x, quitButton.y, quitButton.width, quitButton.height);
+        menuShapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        // Draw text
+        batch.begin();
+        font.getData().setScale(2);
+        float startY = startButton.y + startButton.height/2 + font.getCapHeight()/2;
+        float quitY = quitButton.y + quitButton.height/2 + font.getCapHeight()/2;
+
+        font.draw(batch, "Start Game", startButton.x + 30, startY);
+        font.draw(batch, "Quit Game", quitButton.x + 40, quitY);
+        batch.end();
+    }
+
+
 
     private void update(float delta) {
         if (player.isDead()) return;
@@ -651,10 +752,13 @@ public class SekiroGame extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        super.dispose();
+
         batch.dispose();
         player.dispose();
         enemy.dispose();
         background.dispose();
         shapeRenderer.dispose();
+        menuShapeRenderer.dispose();
     }
 }
