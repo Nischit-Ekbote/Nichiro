@@ -71,6 +71,7 @@ class Player extends GameObject {
     private final Texture[] attackLeft;
     private final Texture[] walkRight;
     private final Texture[] walkLeft;
+    private final Texture[] deathRight;
     private float animationTime;
     private Texture currentTexture;
 
@@ -87,6 +88,7 @@ class Player extends GameObject {
         attackLeft = new Texture[5];
         walkRight = new Texture[2];
         walkLeft = new Texture[2];
+        deathRight = new Texture[6];
 
         loadTextures();
         currentTexture = idleRight[0];
@@ -115,6 +117,10 @@ class Player extends GameObject {
             walkRight[0] = new Texture("walk/walk_right_1.png");
             walkRight[1] = new Texture("walk/walk_right_2.png");
 
+            for (int i = 0; i< 6 ;i ++ ){
+                deathRight[i] = new Texture("death/death" + (i+ 1) + ".png");
+            }
+
         } catch (Exception e) {
             System.err.println("Error loading textures: " + e.getMessage());
             e.printStackTrace();
@@ -124,6 +130,7 @@ class Player extends GameObject {
     public void update(float delta) {
         updateAnimation(delta);
         updateAttack(delta);
+        handlePlayerDeath(delta);
         updateBounds();
     }
 
@@ -148,6 +155,15 @@ class Player extends GameObject {
             Texture[] currentAnim = isRightFacing ? idleRight : idleLeft;
             int frame = (int)(animationTime * 5) % currentAnim.length;
             currentTexture = currentAnim[frame];
+        }
+    }
+
+    private void handlePlayerDeath(float delta){
+        animationTime += delta;
+        if(isDead){
+            int frame = (int)(animationTime * 10) % deathRight.length;
+            currentTexture = deathRight[frame];
+
         }
     }
 
@@ -417,6 +433,7 @@ public class SekiroGame extends ApplicationAdapter {
     private OrthographicCamera camera;
     private ShapeRenderer shapeRenderer;
     private Texture background;
+    private boolean gameOver;
 
     @Override
     public void create() {
@@ -425,6 +442,10 @@ public class SekiroGame extends ApplicationAdapter {
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
+        font.getData().setScale(2f);
+        player = new Player(400, FLOOR_HEIGHT, 200, 100);
+        enemy = new Enemy(100, FLOOR_HEIGHT, 100);
+
         camera = new OrthographicCamera();
         viewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, camera);
         viewport.apply();
@@ -444,11 +465,20 @@ public class SekiroGame extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         background = new Texture("background-2.jpg");
 
+        gameOver = false;
         menuBackground = background;
     }
 
     @Override
     public void render() {
+        float realTime  = Gdx.graphics.getDeltaTime();
+        float delta = realTime * 0.7f;
+
+        if (!gameOver) {
+            update(delta);
+            draw();
+        } else {
+            drawGameOver(delta);
         if (currentState == GameState.MENU) {
             updateMenu();
             drawMenu();
@@ -528,7 +558,10 @@ public class SekiroGame extends ApplicationAdapter {
 
 
     private void update(float delta) {
-        if (player.isDead()) return;
+        if (player.isDead()) {
+            gameOver = true;
+            return;
+        }
 
         handleInput(delta);
         applyPhysics(delta);
@@ -540,6 +573,31 @@ public class SekiroGame extends ApplicationAdapter {
         updateCamera();
     }
 
+    private void drawGameOver(float delta) {
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        batch.begin();
+        font.draw(batch, "GAME OVER",
+            viewport.getWorldWidth() / 2 - 100,
+            viewport.getWorldHeight() / 2);
+
+        font.draw(batch, "Press R to Restart",
+            viewport.getWorldWidth() / 2 - 100,
+            viewport.getWorldHeight() / 2 - 50);
+
+        if (Gdx.input.isKeyPressed(Input.Keys.R)) {
+            resetGame();
+        }
+
+        batch.end();
+    }
+
+    private void resetGame() {
+        player = new Player(400, FLOOR_HEIGHT, 200, 100);
+        enemy = new Enemy(100, FLOOR_HEIGHT, 100);
+        gameOver = false;
+    }
     private void handleInput(float delta) {
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
             player.move(-player.speed * delta, 0);
@@ -573,40 +631,32 @@ public class SekiroGame extends ApplicationAdapter {
     private void handleCollisions() {
         if (player.getIsAttacking()) {
             if (!hasPlayerHitInCurrentAttack && player.getWeapon().overlaps(enemy.getBounds())) {
-                System.out.println("Hit enemy!");
-                if (player.getHealth() > 0) {
-                    // Calculate new health ensuring it doesn't go below 0
-                    int newHealth = Math.max(0, enemy.getHealth() - 30);
-                    System.out.println(newHealth);
-                    enemy.setHealth(newHealth);
-                    hasPlayerHitInCurrentAttack = true;
-                }
-                if (player.getHealth() == 0) {
-                    System.out.println("Game over: Player wins");
-                }
+                int newHealth = Math.max(0, enemy.getHealth() - 30);
+                enemy.setHealth(newHealth);
+                hasPlayerHitInCurrentAttack = true;
             }
         } else {
             hasPlayerHitInCurrentAttack = false;
         }
 
-
         if (enemy.isAttacking()) {
             if (!hasEnemyHitInCurrentAttack && enemy.getAttackHitbox().overlaps(player.getBounds())) {
-//                System.out.println("Hit Player!");
-                if (player.getHealth() > 0) {
-                    // Calculate new health ensuring it doesn't go below 0
-                    int newHealth = Math.max(0, player.getHealth() - 30);
-                    player.setHealth(newHealth);
-                    hasEnemyHitInCurrentAttack = true;
-                }
-                if (player.getHealth() == 0) {
-//                    System.out.println("Game over: Enemy wins");
+                int newHealth = Math.max(0, player.getHealth() - 30);
+                player.setHealth(newHealth);
+                hasEnemyHitInCurrentAttack = true;
+
+                if (newHealth <= 0) {
+                    player.setDead(true);
                 }
             }
         } else {
             hasEnemyHitInCurrentAttack = false;
         }
 
+        // Optional: Add enemy death condition if needed
+        if (enemy.getHealth() <= 0) {
+            // Handle enemy death logic if required
+        }
     }
 
     private void updateCamera() {
@@ -646,9 +696,9 @@ public class SekiroGame extends ApplicationAdapter {
             200);
         batch.end();
 
-        drawDebugShapes();
-        drawWeapon();
-        drawEnemyWeapon();
+//        drawDebugShapes();
+//        drawWeapon();
+//        drawEnemyWeapon();
         drawHealthBar();
     }
 
