@@ -70,6 +70,7 @@ class Player extends GameObject {
     private final Texture[] attackLeft;
     private final Texture[] walkRight;
     private final Texture[] walkLeft;
+    private final Texture[] deathRight;
     private float animationTime;
     private Texture currentTexture;
 
@@ -86,6 +87,7 @@ class Player extends GameObject {
         attackLeft = new Texture[5];
         walkRight = new Texture[2];
         walkLeft = new Texture[2];
+        deathRight = new Texture[6];
 
         loadTextures();
         currentTexture = idleRight[0];
@@ -114,6 +116,10 @@ class Player extends GameObject {
             walkRight[0] = new Texture("walk/walk_right_1.png");
             walkRight[1] = new Texture("walk/walk_right_2.png");
 
+            for (int i = 0; i< 6 ;i ++ ){
+                deathRight[i] = new Texture("death/death" + (i+ 1) + ".png");
+            }
+
         } catch (Exception e) {
             System.err.println("Error loading textures: " + e.getMessage());
             e.printStackTrace();
@@ -123,6 +129,7 @@ class Player extends GameObject {
     public void update(float delta) {
         updateAnimation(delta);
         updateAttack(delta);
+        handlePlayerDeath(delta);
         updateBounds();
     }
 
@@ -147,6 +154,14 @@ class Player extends GameObject {
             Texture[] currentAnim = isRightFacing ? idleRight : idleLeft;
             int frame = (int)(animationTime * 5) % currentAnim.length;
             currentTexture = currentAnim[frame];
+        }
+    }
+
+    private void handlePlayerDeath(float delta){
+        animationTime += delta;
+        if(isDead){
+            int frame = (int)(animationTime * 10) % deathRight.length;
+            currentTexture = deathRight[frame];
         }
     }
 
@@ -481,6 +496,7 @@ public class SekiroGame extends ApplicationAdapter {
                     hasPlayerHitInCurrentAttack = true;
                 }
                 if (player.getHealth() == 0) {
+                    player.setDead(true);
                     System.out.println("Game over: Player wins");
                 }
             }
@@ -545,9 +561,9 @@ public class SekiroGame extends ApplicationAdapter {
             200);
         batch.end();
 
-        drawDebugShapes();
-        drawWeapon();
-        drawEnemyWeapon();
+//        drawDebugShapes();
+//        drawWeapon();
+//        drawEnemyWeapon();
         drawHealthBar();
     }
 
