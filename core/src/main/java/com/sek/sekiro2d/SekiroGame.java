@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.TimeUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 
@@ -74,6 +75,8 @@ class Player extends GameObject {
     private final Texture[] deathRight;
     private float animationTime;
     private Texture currentTexture;
+    private float lastHealTime = 0;
+    private static final float COOLDOWN = 2.0f;
 
     public Player(float x, float y, float speed, int health) {
         super(x, y, 100, 100, speed);
@@ -155,6 +158,11 @@ class Player extends GameObject {
             Texture[] currentAnim = isRightFacing ? idleRight : idleLeft;
             int frame = (int)(animationTime * 5) % currentAnim.length;
             currentTexture = currentAnim[frame];
+        }
+
+        if (Gdx.input.isKeyPressed(Input.Keys.R) && (TimeUtils.nanoTime() - lastHealTime) / 1_000_000_000.0f >= COOLDOWN) {
+            setHealth(getHealth() + 30);
+            lastHealTime = TimeUtils.nanoTime();
         }
     }
 
@@ -252,6 +260,7 @@ class Enemy extends GameObject {
     private float cooldownTimer;
     private Rectangle attackHitbox;
     private int health;
+    private boolean dead;
 
     public Enemy(float x, float y, float speed) {
         super(x, y, 100, 150, speed);
@@ -260,7 +269,7 @@ class Enemy extends GameObject {
         attack = new Texture[5];
         attackLeft = new Texture[5];
         attackHitbox = new Rectangle(x, y, 150, 40);
-        health = 1000;
+        health = 10;
         loadTextures();
         currentTexture = walkRight[0];
         isRightFacing = true;
@@ -387,6 +396,9 @@ class Enemy extends GameObject {
     public Texture getCurrentTexture() { return currentTexture; }
     public int getHealth() { return health; }
     public void setHealth(int health) { this.health = health; }
+    public boolean isDead(){ return dead; }
+    public void setDead(boolean isDead){ this.dead = isDead; }
+
 
     @Override
     public void dispose() {
@@ -401,7 +413,7 @@ public class SekiroGame extends ApplicationAdapter {
     private static final float WORLD_WIDTH = 1000;
     private static final float WORLD_HEIGHT = 520;
     private static final float GRAVITY = -0.5f;
-    private static final float FLOOR_HEIGHT = 50f;
+    private static final float FLOOR_HEIGHT = 90f;
     private static final float JUMP_VELOCITY = 17f;
     private static final float PLAYER_WIDTH = 150;
     private static final float PLAYER_HEIGHT = 150;
@@ -463,7 +475,7 @@ public class SekiroGame extends ApplicationAdapter {
         player = new Player(400, FLOOR_HEIGHT, 200, 100);
         enemy = new Enemy(100, FLOOR_HEIGHT, 100);
         shapeRenderer = new ShapeRenderer();
-        background = new Texture("background-2.jpg");
+        background = new Texture("background/background.jpg");
 
         gameOver = false;
         menuBackground = background;
@@ -544,7 +556,7 @@ public class SekiroGame extends ApplicationAdapter {
 
         // Draw text
         batch.begin();
-        font.getData().setScale(2);
+        font.getData().setScale(1);
         float startY = startButton.y + startButton.height/2 + font.getCapHeight()/2;
         float quitY = quitButton.y + quitButton.height/2 + font.getCapHeight()/2;
 
@@ -556,7 +568,7 @@ public class SekiroGame extends ApplicationAdapter {
 
 
     private void update(float delta) {
-        if (player.isDead()) {
+        if (player.isDead() || enemy.isDead()) {
             gameOver = true;
             return;
         }
@@ -576,16 +588,30 @@ public class SekiroGame extends ApplicationAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         batch.begin();
-        font.draw(batch, "GAME OVER",
-            viewport.getWorldWidth() / 2 - 100,
-            viewport.getWorldHeight() / 2);
+        if(player.isDead()){
+            font.draw(batch, "GAME OVER",
+                viewport.getWorldWidth() / 2 - 100,
+                viewport.getWorldHeight() / 2);
+        }else{
+            font.draw(batch, "YOU WIN",
+                viewport.getWorldWidth() / 2 - 100,
+                viewport.getWorldHeight() / 2);
+        }
 
         font.draw(batch, "Press R to Restart",
             viewport.getWorldWidth() / 2 - 100,
             viewport.getWorldHeight() / 2 - 50);
 
+        font.draw(batch, "Press Q to Exit",
+             100,
+            viewport.getWorldHeight() / 2 - 50);
+
+
         if (Gdx.input.isKeyPressed(Input.Keys.R)) {
             resetGame();
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.Q)){
+            Gdx.app.exit();
         }
 
         batch.end();
@@ -632,6 +658,10 @@ public class SekiroGame extends ApplicationAdapter {
                 int newHealth = Math.max(0, enemy.getHealth() - 30);
                 enemy.setHealth(newHealth);
                 hasPlayerHitInCurrentAttack = true;
+
+                if (newHealth <= 0) {
+                    enemy.setDead(true);
+                }
             }
         } else {
             hasPlayerHitInCurrentAttack = false;
@@ -726,11 +756,11 @@ public class SekiroGame extends ApplicationAdapter {
 
         // Player health bar (green at top)
         shapeRenderer.setColor(Color.GREEN);
-        shapeRenderer.rect(10, viewport.getWorldHeight() - 20, player.getHealth() * 2, 10);
+        shapeRenderer.rect(player.x-420, viewport.getWorldHeight() - 20, player.getHealth() * 2, 10);
 
         // Enemy health bar (red at bottom)
         shapeRenderer.setColor(Color.RED);
-        shapeRenderer.rect(10, 10, enemy.getHealth() / 2, 10);
+        shapeRenderer.rect(player.x-230, 10, enemy.getHealth() / 2, 10);
 
         shapeRenderer.end();
 
@@ -738,10 +768,10 @@ public class SekiroGame extends ApplicationAdapter {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         font.draw(batch, "Player Health: " + player.getHealth(),
-            15, viewport.getWorldHeight() - 5);
+            player.x - 420, viewport.getWorldHeight() - 30);
 
         font.draw(batch, "Enemy Health: " + enemy.getHealth() ,
-            15, 25);
+            player.x - 230 , 40);
 
         batch.end();
     }
